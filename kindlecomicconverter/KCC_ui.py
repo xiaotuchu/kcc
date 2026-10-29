@@ -499,6 +499,11 @@ class Ui_mainWindow(object):
 
         self.gridLayout_2.addWidget(self.tempDirBox, 11, 2, 1, 1)
 
+        self.gutterSplitBox = QCheckBox(self.optionWidget)
+        self.gutterSplitBox.setObjectName(u"gutterSplitBox")
+
+        self.gridLayout_2.addWidget(self.gutterSplitBox, 11, 3, 1, 1)
+
         self.legacyPanelViewBox = QCheckBox(self.optionWidget)
         self.legacyPanelViewBox.setObjectName(u"legacyPanelViewBox")
 
@@ -919,6 +924,10 @@ class Ui_mainWindow(object):
         self.tempDirBox.setToolTip(QCoreApplication.translate("mainWindow", u"<html><head/><body><p><span style=\" font-weight:600; text-decoration: underline;\">Unchecked - Main Drive<br/></span>Use dedicated temporary directory on main OS drive.</p><p><span style=\" font-weight:600; text-decoration: underline;\">Checked - Source File Drive<br/></span>Create temporary file directory on source file drive.</p></body></html>", None))
 #endif // QT_CONFIG(tooltip)
         self.tempDirBox.setText(QCoreApplication.translate("mainWindow", u"Temp Directory", None))
+#if QT_CONFIG(tooltip)
+        self.gutterSplitBox.setToolTip(QCoreApplication.translate("mainWindow", u"<html><head/><body><p>Split every page into strips along full-width empty gutters (horizontal or slanted) for reading with the device held in landscape.</p><p>Cuts never go through panels. Strips keep their aspect ratio and are never rotated.</p><p>Not supported for MOBI/KFX output.</p></body></html>", None))
+#endif // QT_CONFIG(tooltip)
+        self.gutterSplitBox.setText(QCoreApplication.translate("mainWindow", u"Gutter split", None))
 #if QT_CONFIG(tooltip)
         self.legacyPanelViewBox.setToolTip(QCoreApplication.translate("mainWindow", u"Use legacy panel view method from KCC 6.\n"
 "\n"

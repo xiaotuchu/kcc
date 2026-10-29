@@ -988,6 +988,16 @@ Keeping this file may crash some readers like the Kobo native CBZ reader.</strin
          </property>
         </widget>
        </item>
+       <item row="11" column="3">
+        <widget class="QCheckBox" name="gutterSplitBox">
+         <property name="toolTip">
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Split every page into strips along full-width empty gutters (horizontal or slanted) for reading with the device held in landscape.&lt;/p&gt;&lt;p&gt;Cuts never go through panels. Strips keep their aspect ratio and are never rotated.&lt;/p&gt;&lt;p&gt;Not supported for MOBI/KFX output.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+         <property name="text">
+          <string>Gutter split</string>
+         </property>
+        </widget>
+       </item>
        <item row="10" column="2">
         <widget class="QCheckBox" name="legacyPanelViewBox">
          <property name="toolTip">

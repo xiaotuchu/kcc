@@ -328,6 +328,8 @@ def get_options():
         options.eraserainbow = True
     if GUI.maximizeStrips.isChecked():
         options.maximizestrips = True
+    if GUI.gutterSplitBox.isChecked():
+        options.guttersplit = True
     if GUI.disableProcessingBox.isChecked():
         options.noprocessing = True
     if GUI.legacyExtractBox.isChecked():
@@ -860,6 +862,7 @@ class KCCGUI(QObject, KCC_ui.Ui_mainWindow):
         GUI.wallpaperBox.show()
         GUI.outputSplit.show()
         GUI.maximizeStrips.show()
+        GUI.gutterSplitBox.show()
         GUI.noRotateBox.show()
         GUI.rotateFirstBox.show()
         GUI.coverFillBox.show()
@@ -899,6 +902,7 @@ class KCCGUI(QObject, KCC_ui.Ui_mainWindow):
         GUI.wallpaperBox.hide()
         GUI.outputSplit.hide()
         GUI.maximizeStrips.hide()
+        GUI.gutterSplitBox.hide()
         GUI.noRotateBox.hide()
         GUI.rotateFirstBox.hide()
         GUI.coverFillBox.hide()
@@ -1024,6 +1028,8 @@ class KCCGUI(QObject, KCC_ui.Ui_mainWindow):
             # GUI.upscaleBox.setChecked(False)
             GUI.croppingBox.setEnabled(False)
             GUI.croppingBox.setChecked(False)
+            GUI.gutterSplitBox.setEnabled(False)
+            GUI.gutterSplitBox.setChecked(False)
             GUI.interPanelCropBox.setEnabled(False)
             GUI.interPanelCropBox.setChecked(False)
             GUI.autoLevelBox.setEnabled(False)
@@ -1041,6 +1047,7 @@ class KCCGUI(QObject, KCC_ui.Ui_mainWindow):
             if not profile['Label'].startswith('KS') or True:
                 GUI.upscaleBox.setEnabled(True)
             GUI.croppingBox.setEnabled(True)
+            GUI.gutterSplitBox.setEnabled(True)
             GUI.interPanelCropBox.setEnabled(True)
             GUI.autoLevelBox.setEnabled(True)
             GUI.autocontrastBox.setEnabled(True)
@@ -1087,6 +1094,13 @@ class KCCGUI(QObject, KCC_ui.Ui_mainWindow):
 
     def togglechunkSizeCheckBox(self, value):
         GUI.chunkSizeWidget.setVisible(value)
+
+    def togglegutterSplitBox(self, value):
+        GUI.interPanelCropBox.setEnabled(not value)
+        GUI.maximizeStrips.setEnabled(not value)
+        if value:
+            GUI.interPanelCropBox.setChecked(False)
+            GUI.maximizeStrips.setChecked(False)
 
     def toggletitleEdit(self, value):
         if value:
@@ -1425,6 +1439,7 @@ class KCCGUI(QObject, KCC_ui.Ui_mainWindow):
                                            'rotateRightBox': GUI.rotateRightBox.checkState(),
                                            'rotateFirstBox': GUI.rotateFirstBox.checkState(),
                                            'maximizeStrips': GUI.maximizeStrips.checkState(),
+                                           'gutterSplitBox': GUI.gutterSplitBox.checkState(),
                                            'gammaSlider': float(self.gammaValue) * 100,
                                            'chunkSizeCheckBox': GUI.chunkSizeCheckBox.checkState(),
                                            'chunkSizeBox': GUI.chunkSizeBox.value()})
@@ -1782,6 +1797,7 @@ class KCCGUI(QObject, KCC_ui.Ui_mainWindow):
         GUI.mozJpegBox.stateChanged.connect(self.toggleImageFormatBox)
         GUI.wallpaperBox.stateChanged.connect(self.toggleWallpaperBox)
         GUI.chunkSizeCheckBox.stateChanged.connect(self.togglechunkSizeCheckBox)
+        GUI.gutterSplitBox.stateChanged.connect(self.togglegutterSplitBox)
         GUI.deviceBox.activated.connect(self.changeDevice)
         GUI.formatBox.activated.connect(self.changeFormat)
         GUI.titleEdit.textChanged.connect(self.toggletitleEdit)

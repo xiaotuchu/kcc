@@ -28,6 +28,7 @@ from PIL import Image, ImageOps, ImageFile, ImageChops, ImageDraw
 from .rainbow_artifacts_eraser import erase_rainbow_artifacts
 from .page_number_crop_alg import get_bbox_crop_margin_page_number, get_bbox_crop_margin
 from .inter_panel_crop_alg import crop_empty_inter_panel
+from .gutter_split_alg import get_gutter_split_strips
 from .shared import get_contain_resolution
 
 AUTO_CROP_THRESHOLD = 0.015
@@ -175,6 +176,7 @@ class ComicPageParser:
         Image.MAX_IMAGE_PIXELS = int(2048 * 2048 * 2048 // 4 // 3)
         self.opt = options
         self.source = source
+        self.is_first_page = is_first_page
         self.size = self.opt.profileData[1]
         self.payload = []
 
@@ -223,6 +225,10 @@ class ComicPageParser:
     def splitCheck(self):
         width, height = self.image.size
         dstwidth, dstheight = self.size
+        strips = []
+        if self.opt.guttersplit and not self.is_first_page:
+            # empty when the page can't be split: it is then handled as a regular page
+            strips = get_gutter_split_strips(self.image, self.size, self.page_background_color)
         if self.opt.maximizestrips:
             leftbox = (0, 0, int(width / 2), height)
             rightbox = (int(width / 2), 0, width, height)
@@ -238,6 +244,9 @@ class ComicPageParser:
             self.payload.append(['N', self.source, new_image, self.page_background_color, self.fill])
         elif self.opt.webtoon:
             self.payload.append(['N', self.source, self.image, self.page_background_color, self.fill])
+        elif strips:
+            for i, strip in enumerate(strips, 1):
+                self.payload.append([f'G{i:02d}', self.source, strip, self.page_background_color, self.fill])
         # rotate only TODO dead code?
         elif (width > height) != (dstwidth > dstheight) and width <= dstheight and height <= dstwidth and self.opt.splitter == 1:
             spread = self.image
@@ -469,6 +478,9 @@ class ComicPage:
             self.targetPathOrder = '-kcc-b'
         elif 'S2' in mode:
             self.targetPathOrder = '-kcc-c'
+        elif mode.startswith('G'):
+            self.targetPathOrder = '-kcc-x-' + mode[1:]
+        self.gutterStrip = mode.startswith('G')
         # backwards compatibility for Pillow >9.1.0
         if not hasattr(Image, 'Resampling'):
             Image.Resampling = Image
@@ -588,7 +600,20 @@ class ComicPage:
             self.image = erase_rainbow_artifacts(self.image, is_color)
 
     def resizeImage(self):
-        if self.opt.wallpaper:
+        if self.gutterStrip:
+            # strips are read with the device held in landscape: keep aspect ratio, never pad or stretch
+            # a strip too tall to cut is better shown on the portrait screen
+            w, h = self.image.size
+            landscape = (max(self.size), min(self.size))
+            portrait = (min(self.size), max(self.size))
+            box = max(landscape, portrait, key=lambda b: min(b[0] / w, b[1] / h))
+            fits = w <= box[0] and h <= box[1]
+            if not fits:
+                self.image = ImageOps.contain(self.image, box, Image.Resampling.LANCZOS)
+            elif self.opt.upscale or self.opt.stretch:
+                self.image = ImageOps.contain(self.image, box, Image.Resampling.BICUBIC)
+            return
+        elif self.opt.wallpaper:
             pass
         elif self.opt.norotate and self.targetPathOrder in ('-kcc-a', '-kcc-d') and not self.opt.kindle_scribe_azw3:
             # TODO: Kindle Scribe case

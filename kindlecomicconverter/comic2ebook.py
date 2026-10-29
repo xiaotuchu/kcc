@@ -1591,6 +1591,8 @@ def makeParser():
                                     help="Set cropping minimum area ratio [Default=0.0]")
     processing_options.add_argument("--ipc", "--interpanelcrop", type=int, dest="interpanelcrop", default="0",
                                     help="Crop empty sections. 0: Disabled 1: Horizontally 2: Both [Default=0]")
+    processing_options.add_argument("--gs", "--guttersplit", action="store_true", dest="guttersplit", default=False,
+                                    help="Split pages into strips along empty horizontal gutters, for reading in landscape")
     processing_options.add_argument("--blackborders", action="store_true", dest="black_borders", default=False,
                                     help="Disable autodetection and force black borders")
     processing_options.add_argument("--whiteborders", action="store_true", dest="white_borders", default=False,
@@ -1755,6 +1757,16 @@ def checkOptions(options):
         options.profileData = list(image.ProfileData.Profiles[options.profile])
         options.profileData[1] = list(options.profileData[1])
         options.profileData[1][0] = min(1920, options.profileData[1][0])
+
+    # Gutter split replaces spread handling and conflicts with options relying on whole pages
+    if options.guttersplit and options.webtoon:
+        options.guttersplit = False
+    if options.guttersplit:
+        if options.kindle_azw3 or options.kfx:
+            raise UserWarning(QCoreApplication.translate("KCCGUI", 'Gutter split is not supported for MOBI/KFX output'))
+        options.panelview = False
+        options.maximizestrips = False
+        options.interpanelcrop = 0
     return options
 
 
