@@ -1,4 +1,4 @@
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageOps
 import numpy as np
 from math import ceil, radians, tan
 
@@ -9,6 +9,9 @@ A straight line across the whole page is a gutter line when at least 'gutter_whi
 Gutters may be slanted up to 'max_gutter_angle' degrees; they are searched on a copy scaled down to 'detection_width'.
 Consecutive gutter lines form a gutter only when at least max(3px, 'min_gutter_height' * page height) thick.
 Leading/trailing regions shorter than 'noise_band_height' and darker than 'noise_band_dark_ratio' are dropped (page numbers).
+A side column is a narrow column of text along the left or right edge (at most 'side_column_width' of the page),
+set apart from the panels by a full-height white gap and having at least 'side_column_gap_rows' of empty rows.
+Inside it, a cut moves to the nearest empty row between characters, at most 'side_column_shift' of the page height away.
 '''
 white_threshold = 235
 gutter_white_ratio = 0.98
@@ -17,6 +20,9 @@ max_gutter_angle = 15 # degrees
 detection_width = 400 # px
 noise_band_height = 0.05 # percent
 noise_band_dark_ratio = 0.08
+side_column_width = 0.1 # percent
+side_column_gap_rows = 0.15 # percent
+side_column_shift = 0.03 # percent
 merge_tolerance = 1.3
 strip_padding = 4 # px
 
@@ -37,15 +43,16 @@ Content that is too tall and has no gutter is never forced apart: it stays in on
 '''
 def get_gutter_split_strips(img, screen_size, background_color='white'):
     fill = 'white' if background_color == 'white' else 'black'
-    return [cut_strip(img, *plan, fill) for plan in plan_gutter_split(img, screen_size, background_color)]
+    return [cut_strip(img, top_y, bot_y, top, bot, fill)
+            for top_y, bot_y, top, bot in plan_gutter_split(img, screen_size, background_color)]
 
 
 '''
 Plans the strips of a page.
 
     Returns:
-            plans (list of 4-tuple, top line|bottom line|top|bot): Each strip spans rows [top, bot) and keeps only the
-            pixels between its two boundary lines. A line is (y at the left edge, y at the right edge).
+            plans (list of 4-tuple, top boundary|bottom boundary|top|bot): Each strip spans rows [top, bot) and keeps
+            only the pixels between its two boundaries. A boundary is the y of the cut for every column.
             Empty when the page should be kept as a regular page.
 '''
 def plan_gutter_split(img, screen_size, background_color='white'):
@@ -57,7 +64,11 @@ def plan_gutter_split(img, screen_size, background_color='white'):
 
     w, h = img.size
     white = np.array(img) >= white_threshold
-    regions = content_regions(white, find_gutter_lines(img))
+    # side columns would block every gutter: look for gutters across the panels only
+    x0, x1 = panels_area(white)
+    lines = find_gutter_lines(img.crop((x0, 0, x1, h)))
+    boundaries = [gutter_boundary(white, line, x0, x1) for line in lines]
+    regions = content_regions(white, boundaries)
     if not regions:
         return []
     regions = drop_noise_regions(regions, h)
@@ -73,6 +84,59 @@ def plan_gutter_split(img, screen_size, background_color='white'):
     if len(plans) == 1 and plans[0][3] - plans[0][2] > limit:
         return []
     return plans
+
+
+'''
+Finds the columns holding the panels, leaving out a side column of text on either edge.
+
+    Parameters:
+            white (NumPy array): Boolean mask of white pixels.
+    Returns:
+            area (2-tuple, left|right): Columns [left, right) to search gutters in.
+'''
+def panels_area(white):
+    h, w = white.shape
+    gaps = [(s, e) for s, e in true_runs(white.mean(axis=0) >= gutter_white_ratio) if e - s >= 3]
+    x0, x1 = 0, w
+    inner = [gap for gap in gaps if gap[0] > 0 and gap[1] < w]
+    if inner and inner[0][0] <= w * side_column_width and is_side_column(white[:, :inner[0][0]]):
+        x0 = inner[0][0]
+    if inner and w - inner[-1][1] <= w * side_column_width and is_side_column(white[:, inner[-1][1]:]):
+        x1 = inner[-1][1]
+    return x0, x1
+
+
+def is_side_column(white):
+    empty_rows = white.all(axis=1)
+    return not empty_rows.all() and empty_rows.mean() >= side_column_gap_rows
+
+
+'''
+Turns a gutter line found across the panels into a cut for every column of the page: inside a side column
+the cut moves to the nearest empty row, so it doesn't go through a character.
+'''
+def gutter_boundary(white, line, x0, x1):
+    h, w = white.shape
+    ys = np.empty(w)
+    ys[x0:x1] = line_y(line, x1 - x0)
+    if x0 > 0:
+        ys[:x0] = nearest_empty_row(white[:, :x0], ys[x0])
+    if x1 < w:
+        ys[x1:] = nearest_empty_row(white[:, x1:], ys[x1 - 1])
+    return ys
+
+
+def nearest_empty_row(white, y):
+    reach = white.shape[0] * side_column_shift
+    best = None
+    for start, end in true_runs(white.all(axis=1)):
+        if start <= y < end:
+            return y
+        center = (start + end - 1) / 2
+        if abs(center - y) <= reach and (best is None or abs(center - y) < abs(best - y)):
+            best = center
+    # no empty row close enough: cut where the gutter is
+    return y if best is None else best
 
 
 '''
@@ -149,21 +213,20 @@ def line_y(line, w):
 
 
 '''
-Finds content between consecutive gutter lines.
+Finds content between consecutive gutter boundaries.
 
     Parameters:
             white (NumPy array): Boolean mask of white pixels.
-            lines (list of 2-tuple): Gutter lines from top to bottom.
+            boundaries (list of NumPy arrays): Cuts from top to bottom, the y of the cut for every column.
     Returns:
-            regions (list of 5-tuple, top line|bottom line|top|bot|dark ratio): Regions with content, rows [top, bot)
-            hold all their content. Empty for a blank page.
+            regions (list of 5-tuple, top boundary|bottom boundary|top|bot|dark ratio): Regions with content,
+            rows [top, bot) hold all their content. Empty for a blank page.
 '''
-def content_regions(white, lines):
+def content_regions(white, boundaries):
     h, w = white.shape
-    bounds = [(0, 0)] + lines + [(h, h)]
+    bounds = [np.zeros(w)] + boundaries + [np.full(w, h)]
     regions = []
-    for top_line, bot_line in zip(bounds, bounds[1:]):
-        top_y, bot_y = line_y(top_line, w), line_y(bot_line, w)
+    for top_y, bot_y in zip(bounds, bounds[1:]):
         r0, r1 = max(0, int(top_y.min())), min(h, ceil(bot_y.max()))
         rows = np.arange(r0, r1)[:, None]
         inside = (rows >= top_y) & (rows < bot_y)
@@ -173,7 +236,7 @@ def content_regions(white, lines):
             continue
         top, bot = content_rows[0], content_rows[-1] + 1
         dark_ratio = dark[top:bot].sum() / max(1, inside[top:bot].sum())
-        regions.append((top_line, bot_line, r0 + top, r0 + bot, dark_ratio))
+        regions.append((top_y, bot_y, r0 + top, r0 + bot, dark_ratio))
     return regions
 
 
@@ -204,16 +267,16 @@ def merge_regions(regions, limit):
 
 
 '''
-Crops rows [top, bot) and fills everything outside the two boundary lines with the background color.
+Crops rows [top, bot) and fills everything outside the two boundaries with the background color.
 '''
-def cut_strip(img, top_line, bot_line, top, bot, fill):
+def cut_strip(img, top_y, bot_y, top, bot, fill):
     w, _ = img.size
     strip = img.crop((0, top, w, bot))
-    top_y, bot_y = line_y(top_line, w) - top, line_y(bot_line, w) - top
+    top_y, bot_y = top_y - top, bot_y - top
     if top_y.max() <= 0 and bot_y.min() >= strip.height:
         return strip
     if strip.mode not in ('L', 'RGB'):
         strip = strip.convert('RGB')
-    mask = Image.new('L', strip.size, 0)
-    ImageDraw.Draw(mask).polygon([(0, top_y[0]), (w - 1, top_y[-1]), (w - 1, bot_y[-1]), (0, bot_y[0])], fill=255)
+    rows = np.arange(strip.height)[:, None]
+    mask = Image.fromarray(((rows >= top_y) & (rows < bot_y)).astype(np.uint8) * 255)
     return Image.composite(strip, Image.new(strip.mode, strip.size, fill), mask)
